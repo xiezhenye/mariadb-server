@@ -4,7 +4,7 @@ Copyright (c) 2000, 2014, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, 2009 Google Inc.
 Copyright (c) 2009, Percona Inc.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2015, MariaDB Corporation
+Copyright (c) 2013, 2015, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -103,6 +103,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "fts0priv.h"
 #include "page0zip.h"
 #include "fil0pagecompress.h"
+#include "fil0pageencryption.h"
 
 #define thd_get_trx_isolation(X) ((enum_tx_isolation)thd_tx_isolation(X))
 
@@ -630,6 +631,7 @@ static ibool innodb_have_lzo=IF_LZO(1, 0);
 static ibool innodb_have_lz4=IF_LZ4(1, 0);
 static ibool innodb_have_lzma=IF_LZMA(1, 0);
 static ibool innodb_have_bzip2=IF_BZIP2(1, 0);
+static ibool innodb_have_snappy=IF_SNAPPY(1, 0);
 
 static const char innobase_hton_name[]= "InnoDB";
 
@@ -827,6 +829,8 @@ static SHOW_VAR innodb_status_variables[]= {
   (char*) &innodb_have_lzma,		  SHOW_BOOL},
   {"have_bzip2",
   (char*) &innodb_have_bzip2,		  SHOW_BOOL},
+  {"have_snappy",
+  (char*) &innodb_have_snappy,		  SHOW_BOOL},
 
   /* Defragmentation */
   {"defragment_compression_failures",
@@ -3223,6 +3227,15 @@ innobase_init(
 	if (innodb_compression_algorithm == PAGE_BZIP2_ALGORITHM) {
 		sql_print_error("InnoDB: innodb_compression_algorithm = %lu unsupported.\n"
 				"InnoDB: libbz2 is not installed. \n",
+				innodb_compression_algorithm);
+		goto error;
+	}
+#endif
+
+#ifndef HAVE_SNAPPY
+	if (innodb_compression_algorithm == PAGE_SNAPPY_ALGORITHM) {
+		sql_print_error("InnoDB: innodb_compression_algorithm = %lu unsupported.\n"
+				"InnoDB: libsnappy is not installed. \n",
 				innodb_compression_algorithm);
 		goto error;
 	}
@@ -11020,7 +11033,7 @@ innobase_table_flags(
 	modified by another thread while the table is being created. */
 	const ulint     default_compression_level = page_zip_level;
 
-	const ulint default_encryption_key = 0;
+	const ulint default_encryption_key = srv_default_page_encryption_key;
 
 	*flags = 0;
 	*flags2 = 0;
@@ -11221,12 +11234,12 @@ index_bad:
 		    zip_ssize,
 		    use_data_dir,
 		    options->page_compressed,
-		    (ulint)options->page_compression_level == 0 ?
+		    options->page_compression_level == 0 ?
 		        default_compression_level : options->page_compression_level,
 		    options->atomic_writes,
 		    options->page_encryption,
-		    (ulint)options->page_encryption_key == 0 ?
-                        default_encryption_key : options->page_encryption_key);
+		    options->page_encryption_key == 0 ?
+		        default_encryption_key : options->page_encryption_key);
 
 	if (create_info->options & HA_LEX_CREATE_TMP_TABLE) {
 		*flags2 |= DICT_TF2_TEMPORARY;
@@ -11385,7 +11398,6 @@ ha_innobase::check_table_options(
 				options->page_encryption_key
 			);
 			return "PAGE_ENCRYPTION_KEY";
-
 		}
 	}
 
@@ -19061,7 +19073,7 @@ static MYSQL_SYSVAR_BOOL(use_trim, srv_use_trim,
   "Use trim. Default FALSE.",
   NULL, NULL, FALSE);
 
-static const char *page_compression_algorithms[]= { "none", "zlib", "lz4", "lzo", "lzma", "bzip2", 0 };
+static const char *page_compression_algorithms[]= { "none", "zlib", "lz4", "lzo", "lzma", "bzip2", "snappy", 0 };
 static TYPELIB page_compression_algorithms_typelib=
 {
   array_elements(page_compression_algorithms) - 1, 0,
@@ -19126,6 +19138,13 @@ static MYSQL_SYSVAR_UINT(encryption_rotation_iops, srv_n_fil_crypt_iops,
 			 NULL,
 			 innodb_encryption_rotation_iops_update,
 			 srv_n_fil_crypt_iops, 0, UINT_MAX32, 0);
+
+static MYSQL_SYSVAR_UINT(default_page_encryption_key, srv_default_page_encryption_key,
+			 PLUGIN_VAR_RQCMDARG,
+			 "Encryption key used for page encryption.",
+			 NULL,
+			 NULL,
+			 DEFAULT_ENCRYPTION_KEY, 1, 255, 0);
 
 static MYSQL_SYSVAR_BOOL(scrub_log, srv_scrub_log,
   PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
@@ -19388,6 +19407,7 @@ static struct st_mysql_sys_var* innobase_system_variables[]= {
   MYSQL_SYSVAR(scrub_log),
   MYSQL_SYSVAR(scrub_log_interval),
   MYSQL_SYSVAR(encrypt_log),
+  MYSQL_SYSVAR(default_page_encryption_key),
 
   /* Scrubing feature */
   MYSQL_SYSVAR(immediate_scrub_data_uncompressed),
@@ -20017,5 +20037,15 @@ innodb_compression_algorithm_validate(
 	}
 #endif
 
+#ifndef HAVE_SNAPPY
+	if (compression_algorithm == PAGE_SNAPPY_ALGORITHM) {
+		push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+				    HA_ERR_UNSUPPORTED,
+				    "InnoDB: innodb_compression_algorithm = %lu unsupported.\n"
+				    "InnoDB: libsnappy is not installed. \n",
+				    compression_algorithm);
+		DBUG_RETURN(1);
+	}
+#endif
 	DBUG_RETURN(0);
 }
