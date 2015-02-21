@@ -517,9 +517,11 @@ rw_lock_x_lock_wait(
 					       file_name, line);
 #endif
 
-			lock->thread_id = os_thread_get_curr_id();
-			lock->file_name = file_name;
-			lock->line = line;
+			if (srv_instrument_semaphores) {
+				lock->thread_id = os_thread_get_curr_id();
+				lock->file_name = file_name;
+				lock->line = line;
+			}
 
 			sync_array_wait_event(sync_arr, index);
 #ifdef UNIV_SYNC_DEBUG
@@ -594,9 +596,12 @@ rw_lock_x_lock_low(
 	rw_lock_add_debug_info(lock, pass, RW_LOCK_EX, file_name, line);
 #endif
 
-	lock->thread_id = os_thread_get_curr_id();
-	lock->file_name = file_name;
-	lock->line = line;
+	if (srv_instrument_semaphores) {
+		lock->thread_id = os_thread_get_curr_id();
+		lock->file_name = file_name;
+		lock->line = line;
+	}
+
 	lock->last_x_file_name = file_name;
 	lock->last_x_line = (unsigned int) line;
 

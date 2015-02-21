@@ -402,10 +402,11 @@ mutex_enter_nowait_func(
 		mutex->thread_id = os_thread_get_curr_id();
 #ifdef UNIV_SYNC_DEBUG
 		mutex_set_debug_info(mutex, file_name, line);
-#else
-		mutex->file_name = file_name;
-		mutex->line = line;
 #endif
+		if (srv_instrument_semaphores) {
+			mutex->file_name = file_name;
+			mutex->line = line;
+		}
 
 		return(0);	/* Succeeded! */
 	}
@@ -527,10 +528,12 @@ spin_loop:
 		mutex->thread_id = os_thread_get_curr_id();
 #ifdef UNIV_SYNC_DEBUG
 		mutex_set_debug_info(mutex, file_name, line);
-#else
-		mutex->file_name = file_name;
-		mutex->line = line;
 #endif
+		if (srv_instrument_semaphores) {
+			mutex->file_name = file_name;
+			mutex->line = line;
+		}
+
 		return;
 	}
 
@@ -573,10 +576,11 @@ spin_loop:
 			mutex->thread_id = os_thread_get_curr_id();
 #ifdef UNIV_SYNC_DEBUG
 			mutex_set_debug_info(mutex, file_name, line);
-#else
-			mutex->file_name = file_name;
-			mutex->line = line;
 #endif
+			if (srv_instrument_semaphores) {
+				mutex->file_name = file_name;
+				mutex->line = line;
+			}
 
 			return;
 

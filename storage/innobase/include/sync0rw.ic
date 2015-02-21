@@ -324,9 +324,12 @@ rw_lock_s_lock_low(
 	or even refer to a line that is invalid for the file name. */
 	lock->last_s_file_name = file_name;
 	lock->last_s_line = line;
-	lock->thread_id = os_thread_get_curr_id();
-	lock->file_name = file_name;
-	lock->line = line;
+
+	if (srv_instrument_semaphores) {
+		lock->thread_id = os_thread_get_curr_id();
+		lock->file_name = file_name;
+		lock->line = line;
+	}
 
 	return(TRUE);	/* locking succeeded */
 }
@@ -429,9 +432,12 @@ rw_lock_x_lock_func_nowait(
 	rw_lock_add_debug_info(lock, 0, RW_LOCK_EX, file_name, line);
 #endif
 
-	lock->thread_id = os_thread_get_curr_id();
-	lock->file_name = file_name;
-	lock->line = line;
+	if (srv_instrument_semaphores) {
+		lock->thread_id = os_thread_get_curr_id();
+		lock->file_name = file_name;
+		lock->line = line;
+	}
+
 	lock->last_x_file_name = file_name;
 	lock->last_x_line = line;
 

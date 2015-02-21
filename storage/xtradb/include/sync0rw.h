@@ -40,6 +40,9 @@ Created 9/11/1995 Heikki Tuuri
 #include "sync0sync.h"
 #include "os0sync.h"
 
+/** Enable semaphore request instrumentation */
+extern my_bool srv_instrument_semaphores;
+
 /* The following undef is to prevent a name conflict with a macro
 in MySQL: */
 #undef rw_lock_t

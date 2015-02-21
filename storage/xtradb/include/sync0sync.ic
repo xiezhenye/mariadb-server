@@ -267,10 +267,12 @@ mutex_enter_func(
 		mutex->thread_id = os_thread_get_curr_id();
 #ifdef UNIV_SYNC_DEBUG
 		mutex_set_debug_info(mutex, file_name, line);
-#else
-		mutex->file_name = file_name;
-		mutex->line = line;
 #endif
+		if (srv_instrument_semaphores) {
+			mutex->file_name = file_name;
+			mutex->line = line;
+		}
+
 		return;	/* Succeeded! */
 	}
 
@@ -310,10 +312,10 @@ mutex_enter_func(
 		mutex->base_mutex.thread_id = os_thread_get_curr_id();
 #ifdef UNIV_SYNC_DEBUG
 		mutex_set_debug_info(&mutex->base_mutex, file_name, line);
-#else
+#endif
 		mutex->base_mutex.file_name = file_name;
 		mutex->base_mutex.line = line;
-#endif
+
 		return;	/* Succeeded! */
 	}
 

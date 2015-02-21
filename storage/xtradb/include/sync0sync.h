@@ -43,6 +43,9 @@ Created 9/5/1995 Heikki Tuuri
 #include "sync0arr.h"
 #include "ut0counter.h"
 
+/** Enable semaphore request instrumentation */
+extern my_bool srv_instrument_semaphores;
+
 #if  defined(UNIV_DEBUG) && !defined(UNIV_HOTBACKUP)
 extern "C" my_bool	timed_mutexes;
 #endif /* UNIV_DEBUG && !UNIV_HOTBACKUP */
