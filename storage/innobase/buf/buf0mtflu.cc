@@ -49,6 +49,7 @@ Modified 06/02/2014 Jan Lindström jan.lindstrom@skysql.com
 #include "mysql/plugin.h"
 #include "mysql/service_thd_wait.h"
 #include "fil0pagecompress.h"
+#include "ha_prototypes.h"
 
 #define	MT_COMP_WATER_MARK	50
 /** Time to wait for a message. */
@@ -197,7 +198,7 @@ buf_mtflu_flush_pool_instance(
 		help in the retry which will follow the
 		failure. */
 #ifdef UNIV_MTFLUSH_DEBUG
-		fprintf(stderr, "InnoDB: Note: buf flush start failed there is already active flush for this buffer pool.\n");
+		ib_logff(IB_LOG_LEVEL_INFO, "Buf flush start failed there is already active flush for this buffer pool.");
 #endif
 		return 0;
 	}
