@@ -6785,8 +6785,12 @@ ha_innobase::innobase_lock_autoinc(void)
 		old style only if another transaction has already acquired
 		the AUTOINC lock on behalf of a LOAD FILE or INSERT ... SELECT
 		etc. type of statement. */
+
+		/* If this is (single/multi) row INSERTs/REPLACEs, or
+		slave thread executing Write_rows_log_event */
 		if (thd_sql_command(user_thd) == SQLCOM_INSERT
-		    || thd_sql_command(user_thd) == SQLCOM_REPLACE) {
+		    || thd_sql_command(user_thd) == SQLCOM_REPLACE
+		    || (thd_slave_thread(user_thd) && thd_sql_command(user_thd) == SQLCOM_END)) {
 			dict_table_t*	ib_table = prebuilt->table;
 
 			/* Acquire the AUTOINC mutex. */
@@ -6798,6 +6802,8 @@ ha_innobase::innobase_lock_autoinc(void)
 				/* Release the mutex to avoid deadlocks. */
 				dict_table_autoinc_unlock(ib_table);
 			} else {
+				/* Do not fall back to old style autoinc
+				locking */
 				break;
 			}
 		}
