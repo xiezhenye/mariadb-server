@@ -541,7 +541,7 @@ void print_index_leaf_stats(unsigned long long id, const per_index_stats& index)
 void defrag_analysis(unsigned long long id, const per_index_stats& index)
 {
   // TODO: make it work for compressed pages too
-  std::map<const long unsigned int, per_page_stats>::const_iterator it = index.leaves.find(index.first_leaf_page);
+  std::map<ulint, per_page_stats>::const_iterator it = index.leaves.find(index.first_leaf_page);
   ulint n_pages = 0;
   ulint n_leaf_pages = 0;
   while (it != index.leaves.end()) {
