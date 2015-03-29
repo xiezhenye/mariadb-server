@@ -1587,6 +1587,9 @@ loop:
 		  log_sys->buf + area_end - OS_FILE_LOG_BLOCK_SIZE,
 		  OS_FILE_LOG_BLOCK_SIZE);
 
+	/* Clean up the tail of the log buffer */
+	memset(log_sys->buf+end_offset, 0, (log_sys->buf+area_end)-(log_sys->buf+end_offset));
+
 	log_sys->buf_free += OS_FILE_LOG_BLOCK_SIZE;
 	log_sys->write_end_offset = log_sys->buf_free;
 
