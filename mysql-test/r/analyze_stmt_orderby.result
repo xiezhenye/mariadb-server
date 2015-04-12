@@ -174,7 +174,6 @@ EXPLAIN
     "select_id": 1,
     "filesort": {
       "temporary_table": {
-        "function": "buffer",
         "table": {
           "table_name": "t0",
           "access_type": "ALL",
@@ -212,6 +211,7 @@ ANALYZE
       "r_output_rows": 4,
       "r_total_time_ms": "REPLACED",
       "temporary_table": {
+        "function": "buffer",
         "table": {
           "table_name": "t0",
           "access_type": "ALL",
@@ -324,6 +324,108 @@ ANALYZE
       "r_total_time_ms": "REPLACED",
       "filtered": 100,
       "r_filtered": 100
+    }
+  }
+}
+#
+# Temp-table based GROUP BY + implied orderding
+#
+explain 
+select b, max(a) from t2 group by t2.b;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	9995	Using temporary; Using filesort
+explain format=json
+select b, max(a) from t2 group by t2.b;
+EXPLAIN
+{
+  "query_block": {
+    "select_id": 1,
+    "filesort": {
+      "temporary_table": {
+        "table": {
+          "table_name": "t2",
+          "access_type": "ALL",
+          "rows": 9995,
+          "filtered": 100
+        }
+      }
+    }
+  }
+}
+analyze format=json
+select b, max(a) from t2 group by t2.b;
+ANALYZE
+{
+  "query_block": {
+    "select_id": 1,
+    "r_loops": 1,
+    "r_total_time_ms": "REPLACED",
+    "filesort": {
+      "r_loops": 1,
+      "r_limit": "none",
+      "r_used_priority_queue": false,
+      "r_output_rows": 9995,
+      "r_total_time_ms": "REPLACED",
+      "r_buffer_size": "REPLACED",
+      "temporary_table": {
+        "function": "group-by",
+        "table": {
+          "table_name": "t2",
+          "access_type": "ALL",
+          "r_loops": 1,
+          "rows": 9995,
+          "r_rows": 9995,
+          "r_total_time_ms": "REPLACED",
+          "filtered": 100,
+          "r_filtered": 100
+        }
+      }
+    }
+  }
+}
+#
+# Temp-table based GROUP BY + no orderding
+#
+explain 
+select b, max(a) from t2 group by t2.b order by null;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	9995	Using temporary
+explain format=json
+select b, max(a) from t2 group by t2.b order by null;
+EXPLAIN
+{
+  "query_block": {
+    "select_id": 1,
+    "temporary_table": {
+      "table": {
+        "table_name": "t2",
+        "access_type": "ALL",
+        "rows": 9995,
+        "filtered": 100
+      }
+    }
+  }
+}
+analyze format=json
+select b, max(a) from t2 group by t2.b order by null;
+ANALYZE
+{
+  "query_block": {
+    "select_id": 1,
+    "r_loops": 1,
+    "r_total_time_ms": "REPLACED",
+    "temporary_table": {
+      "function": "group-by",
+      "table": {
+        "table_name": "t2",
+        "access_type": "ALL",
+        "r_loops": 1,
+        "rows": 9995,
+        "r_rows": 9995,
+        "r_total_time_ms": "REPLACED",
+        "filtered": 100,
+        "r_filtered": 100
+      }
     }
   }
 }

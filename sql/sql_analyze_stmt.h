@@ -400,15 +400,7 @@ public:
   }
 
   /* Report that a temporary table is created. */
-  void report_tmp_table(TABLE *tbl)
-  {
-    DBUG_ASSERT(n_actions < MAX_QEP_ACTIONS);
-    action_index[n_actions]= cur_tmp_table;
-    qep_actions[n_actions++]= EXPL_ACTION_TEMPTABLE;
-
-    DBUG_ASSERT(cur_tmp_table < 2);
-    cur_tmp_table++;
-  }
+  void report_tmp_table(TABLE *tbl);
 
   /* Report that we are doing a filesort. */
   Filesort_tracker *report_sorting()

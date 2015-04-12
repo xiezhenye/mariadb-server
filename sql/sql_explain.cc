@@ -795,7 +795,11 @@ void Explain_select::print_explain_json(Explain_query *query,
         {
           writer->add_member("temporary_table").start_object();
           started_objects++;
-          /*
+
+          uint nr= ops_tracker.action_index[i];
+          enum_tmp_table_use tmp= ops_tracker.tmp_table_kind[nr];
+          const char *func;
+
           if (tmp == EXPL_TMP_TABLE_BUFFER)
             func= "buffer";
           else if (tmp == EXPL_TMP_TABLE_GROUP)
@@ -803,7 +807,6 @@ void Explain_select::print_explain_json(Explain_query *query,
           else
             func= "distinct";
           writer->add_member("function").add_str(func);
-         */
         }
         else if (ops_tracker.qep_actions[i] == EXPL_ACTION_REMOVE_DUPS)
         {
@@ -827,7 +830,14 @@ void Explain_select::print_explain_json(Explain_query *query,
           writer->add_member("filesort").start_object();
         }
         writer->add_member("temporary_table").start_object();
-        writer->add_member("function").add_str("buffer");
+        /*
+        Don't:
+        //writer->add_member("function").add_str("buffer");
+        we can't really tell. For example, there is a common case where
+        filesort reads from group-by table.
+        psergey-todo: get a reasonably accurate condition that catches 
+        GROUP BY in common cases.
+        */
       }
       else
       {

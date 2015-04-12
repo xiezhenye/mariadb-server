@@ -65,3 +65,21 @@ void Filesort_tracker::print_json(Json_writer *writer)
   }
 }
 
+
+void Sort_and_group_tracker::report_tmp_table(TABLE *tbl)
+{
+  DBUG_ASSERT(n_actions < MAX_QEP_ACTIONS);
+  action_index[n_actions]= cur_tmp_table;
+  qep_actions[n_actions++]= EXPL_ACTION_TEMPTABLE;
+  
+  DBUG_ASSERT(!(tbl->distinct && tbl->group));
+  if (tbl->distinct)
+    tmp_table_kind[cur_tmp_table]= EXPL_TMP_TABLE_DISTINCT;
+  else if (tbl->group)
+    tmp_table_kind[cur_tmp_table]= EXPL_TMP_TABLE_GROUP;
+  else
+    tmp_table_kind[cur_tmp_table]= EXPL_TMP_TABLE_BUFFER;
+
+  DBUG_ASSERT(cur_tmp_table < 2);
+  cur_tmp_table++;
+}
