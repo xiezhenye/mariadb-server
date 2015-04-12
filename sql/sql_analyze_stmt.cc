@@ -26,29 +26,34 @@
 void Filesort_tracker::print_json(Json_writer *writer)
 {
   const char *varied_str= "(varied across executions)";
-  writer->add_member("r_loops").add_ll(r_loops);
+  writer->add_member("r_loops").add_ll(tracker.count);
   
-  if (r_limit != HA_POS_ERROR)
-  {
-    writer->add_member("r_limit");
-    if (r_limit == 0)
-      writer->add_str(varied_str);
-    else
-      writer->add_ll(rint(r_limit/r_loops));
-  }
+  writer->add_member("r_limit");
+  if (r_limit == HA_POS_ERROR)
+    writer->add_str("none");
+  else if (r_limit == 0)
+    writer->add_str(varied_str);
+  else
+    writer->add_ll(rint(r_limit/tracker.count));
 
   writer->add_member("r_used_priority_queue"); 
-  if (r_used_pq == r_loops)
+  if (r_used_pq == tracker.count)
     writer->add_bool(true);
   else if (r_used_pq == 0)
     writer->add_bool(false);
   else
     writer->add_str(varied_str);
 
-  writer->add_member("r_output_rows").add_ll(rint(r_output_rows / r_loops));
+  writer->add_member("r_output_rows").
+          add_ll(rint(r_output_rows / tracker.count));
+  
+  writer->add_member("r_total_time_ms").add_double(tracker.get_time_ms());
 
   if (sort_passes)
-    writer->add_member("r_sort_passes").add_ll(rint(sort_passes / r_loops));
+  {
+    writer->add_member("r_sort_passes").
+    add_ll(rint(sort_passes / tracker.count));
+  }
 
   if (sort_buffer_size != 0)
   {

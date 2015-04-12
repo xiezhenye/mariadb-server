@@ -203,7 +203,8 @@ public:
   Explain_basic_join(root),
     message(NULL),
     using_temporary(false), using_filesort(false),
-    time_tracker(is_analyze)
+    time_tracker(is_analyze),
+    ops_tracker(is_analyze)
   {}
 
   /*

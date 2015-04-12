@@ -42,7 +42,8 @@ ANALYZE
       "r_loops": 1,
       "r_limit": 5,
       "r_used_priority_queue": true,
-      "r_output_rows": 6,
+      "r_output_rows": 5,
+      "r_total_time_ms": "REPLACED",
       "table": {
         "update": 1,
         "table_name": "t2",
@@ -140,8 +141,10 @@ ANALYZE
     "r_total_time_ms": "REPLACED",
     "filesort": {
       "r_loops": 1,
+      "r_limit": "none",
       "r_used_priority_queue": false,
       "r_output_rows": 10000,
+      "r_total_time_ms": "REPLACED",
       "r_buffer_size": "REPLACED",
       "table": {
         "delete": 1,
@@ -203,6 +206,11 @@ ANALYZE
     "r_loops": 1,
     "r_total_time_ms": "REPLACED",
     "filesort": {
+      "r_loops": 1,
+      "r_limit": 4,
+      "r_used_priority_queue": true,
+      "r_output_rows": 4,
+      "r_total_time_ms": "REPLACED",
       "temporary_table": {
         "table": {
           "table_name": "t0",
@@ -284,8 +292,10 @@ ANALYZE
       "r_rows": 10,
       "filesort": {
         "r_loops": 1,
+        "r_limit": "none",
         "r_used_priority_queue": false,
         "r_output_rows": 10,
+        "r_total_time_ms": "REPLACED",
         "r_buffer_size": "REPLACED",
         "table": {
           "table_name": "t0",

@@ -787,6 +787,9 @@ void Explain_select::print_explain_json(Explain_query *query,
           }
           writer->add_member("filesort").start_object();
           started_objects++;
+
+          uint nr= ops_tracker.action_index[i];
+          ops_tracker.filesort_tracker[nr].print_json(writer);
         }
         else if (ops_tracker.qep_actions[i] == EXPL_ACTION_TEMPTABLE)
         {

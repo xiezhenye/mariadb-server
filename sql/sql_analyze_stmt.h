@@ -69,6 +69,8 @@ public:
     // convert 'cycles' to milliseconds.
     return 1000 * ((double)cycles) / sys_timer_info.cycles.frequency;
   }
+
+  friend class Filesort_tracker;
 };
 
 
@@ -79,6 +81,8 @@ public:
 
 class Time_and_counter_tracker: public Exec_time_tracker
 {
+  void init_timed(bool timed_arg) {*((bool*)&timed)= timed_arg;}
+  friend class Sort_and_group_tracker;
 public: 
   const bool timed;
   
@@ -168,25 +172,46 @@ class Json_writer;
 
 class Filesort_tracker : public Sql_alloc
 {
-public:
+  /* 
+    A special ctor to help Sort_and_group which currently keeps an array of 
+    Filesort_tracker objects.
+    */
+  friend class Sort_and_group_tracker;
   Filesort_tracker() :
-    r_loops(0), r_limit(0), r_used_pq(0), 
+    tracker(false), r_limit(0), r_used_pq(0), 
     r_examined_rows(0), r_sorted_rows(0), r_output_rows(0),
     sort_passes(0),
     sort_buffer_size(0)
   {}
-  
+
+public:
+  Filesort_tracker(bool timed_arg) :
+    tracker(timed_arg), r_limit(0), r_used_pq(0), 
+    r_examined_rows(0), r_sorted_rows(0), r_output_rows(0),
+    sort_passes(0),
+    sort_buffer_size(0)
+  {}
+
   /* Functions that filesort uses to report various things about its execution */
 
+  /*
+    We assume this is called when filesort strats.
+  */
   inline void report_use(ha_rows r_limit_arg)
   {
-    if (!r_loops++)
+    if (!tracker.count++)
       r_limit= r_limit_arg;
     else
       r_limit= (r_limit != r_limit_arg)? 0: r_limit_arg;
+
+    if (unlikely(tracker.timed))
+      tracker.start_tracking();
   }
   inline void incr_pq_used() { r_used_pq++; }
-
+ 
+  /*
+    We assume this is called on filesort end.
+  */
   inline void report_row_numbers(ha_rows examined_rows, 
                                  ha_rows sorted_rows,
                                  ha_rows returned_rows) 
@@ -194,6 +219,8 @@ public:
     r_examined_rows += examined_rows;
     r_sorted_rows   += sorted_rows;
     r_output_rows   += returned_rows;
+    if (unlikely(tracker.timed))
+      tracker.stop_tracking();
   }
 
   inline void report_merge_passes_at_start(ulong passes)
@@ -216,14 +243,14 @@ public:
   /* Functions to get the statistics */
   void print_json(Json_writer *writer);
   
-  ulonglong get_r_loops() { return r_loops; }
+  ulonglong get_r_loops() { return tracker.count; }
   double get_avg_examined_rows() 
   { 
-    return ((double)r_examined_rows) / r_loops;
+    return ((double)r_examined_rows) / tracker.count;
   }
   double get_avg_returned_rows()
   { 
-    return ((double)r_output_rows) / r_loops; 
+    return ((double)r_output_rows) / tracker.count; 
   }
   double get_r_filtered()
   {
@@ -233,7 +260,8 @@ public:
       return 1.0;
   }
 private:
-  ulonglong r_loops; /* How many times filesort was invoked */
+  /* This keeps the number of how many times filesort was invoked */
+  Time_and_counter_tracker tracker;
   /*
     LIMIT is typically a constant. There is never "LIMIT 0".
       HA_POS_ERROR means we never had a limit
@@ -336,6 +364,8 @@ class Sort_and_group_tracker : public Sql_alloc
   /* Query actions in the order they were made */
   enum_qep_action qep_actions[MAX_QEP_ACTIONS];
   uint n_actions;
+
+  uint action_index[MAX_QEP_ACTIONS];
   
   /* 
     Trackers for filesort operation. JOIN::exec() may need at most two sorting
@@ -351,11 +381,14 @@ class Sort_and_group_tracker : public Sql_alloc
   friend class Explain_select;
 
 public:
-  Sort_and_group_tracker() : 
+  Sort_and_group_tracker(bool timed_arg) : 
     n_actions(0),
     cur_tracker(0),
     cur_tmp_table(0)
-  {}
+  {
+    filesort_tracker[0].tracker.init_timed(timed_arg);
+    filesort_tracker[1].tracker.init_timed(timed_arg);
+  }
 
   /*************** Reporting interface ***************/
   /* Report that join execution is started */
@@ -370,6 +403,7 @@ public:
   void report_tmp_table(TABLE *tbl)
   {
     DBUG_ASSERT(n_actions < MAX_QEP_ACTIONS);
+    action_index[n_actions]= cur_tmp_table;
     qep_actions[n_actions++]= EXPL_ACTION_TEMPTABLE;
 
     DBUG_ASSERT(cur_tmp_table < 2);
@@ -380,6 +414,7 @@ public:
   Filesort_tracker *report_sorting()
   {
     DBUG_ASSERT(n_actions < MAX_QEP_ACTIONS);
+    action_index[n_actions]= cur_tracker;
     qep_actions[n_actions++]= EXPL_ACTION_FILESORT;
 
     DBUG_ASSERT(cur_tracker < 2);

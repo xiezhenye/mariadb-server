@@ -169,6 +169,7 @@ ha_rows filesort(THD *thd, TABLE *table, SORT_FIELD *sortorder, uint s_length,
 
   MYSQL_FILESORT_START(table->s->db.str, table->s->table_name.str);
   DEBUG_SYNC(thd, "filesort_start");
+  tracker->report_use(max_rows); // this may note the time
 
   /*
    Release InnoDB's adaptive hash index latch (if holding) before
@@ -212,7 +213,6 @@ ha_rows filesort(THD *thd, TABLE *table, SORT_FIELD *sortorder, uint s_length,
   else
     thd->inc_status_sort_scan();
   thd->query_plan_flags|= QPLAN_FILESORT;
-  tracker->report_use(max_rows);
 
   // If number of rows is not known, use as much of sort buffer as possible. 
   num_rows= table->file->estimate_rows_upper_bound();
@@ -305,7 +305,6 @@ ha_rows filesort(THD *thd, TABLE *table, SORT_FIELD *sortorder, uint s_length,
 
   maxbuffer= (uint) (my_b_tell(&buffpek_pointers)/sizeof(*buffpek));
   tracker->report_merge_passes_at_start(thd->query_plan_fsort_passes);
-  tracker->report_row_numbers(param.examined_rows, *found_rows, num_rows);
 
   if (maxbuffer == 0)			// The whole set is in memory
   {
@@ -439,6 +438,7 @@ ha_rows filesort(THD *thd, TABLE *table, SORT_FIELD *sortorder, uint s_length,
   DBUG_PRINT("exit",
              ("num_rows: %ld examined_rows: %ld found_rows: %ld",
               (long) num_rows, (long) *examined_rows, (long) *found_rows));
+  tracker->report_row_numbers(*examined_rows, *found_rows, num_rows);
   MYSQL_FILESORT_DONE(error, num_rows);
   DBUG_RETURN(error ? HA_POS_ERROR : num_rows);
 } /* filesort */
