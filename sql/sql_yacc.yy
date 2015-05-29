@@ -55,6 +55,8 @@
 #include "sql_handler.h"                       // Sql_cmd_handler_*
 #include "sql_signal.h"
 #include "sql_get_diagnostics.h"               // Sql_cmd_get_diagnostics
+#include "sql_window.h"
+#include "item_windowfunc.h"
 #include "event_parse_data.h"
 #include "create_options.h"
 #include <myisam.h>
@@ -963,6 +965,8 @@ bool LEX::set_bincmp(CHARSET_INFO *cs, bool bin)
   handlerton *db_type;
   st_select_lex *select_lex;
   struct p_elem_val *p_elem_value;
+  class Window_frame *window_frame;
+  class Window_frame_bound *window_frame_bound;
   udf_func *udf;
 
   /* enums */
@@ -989,6 +993,9 @@ bool LEX::set_bincmp(CHARSET_INFO *cs, bool bin)
   enum sp_variable::enum_mode spvar_mode;
   enum thr_lock_type lock_type;
   enum enum_mysql_timestamp_type date_time_type;
+  enum Window_frame_bound::Bound_precedence_type bound_precedence_type;
+  enum Window_frame::Frame_units frame_units;
+  enum Window_frame::Frame_exclusion frame_exclusion;
   DDL_options_st object_ddl_options;
 }
 
@@ -1000,10 +1007,10 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %parse-param { THD *thd }
 %lex-param { THD *thd }
 /*
-  Currently there are 164 shift/reduce conflicts.
+  Currently there are 168 shift/reduce conflicts.
   We should not introduce new conflicts any more.
 */
-%expect 164
+%expect 168
 
 /*
    Comments for TOKENS.
@@ -1126,6 +1133,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  CREATE                        /* SQL-2003-R */
 %token  CROSS                         /* SQL-2003-R */
 %token  CUBE_SYM                      /* SQL-2003-R */
+%token  CUME_DIST_SYM
 %token  CURDATE                       /* MYSQL-FUNC */
 %token  CURRENT_SYM                   /* SQL-2003-R */
 %token  CURRENT_USER                  /* SQL-2003-R */
@@ -1156,6 +1164,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  DELAYED_SYM
 %token  DELAY_KEY_WRITE_SYM
 %token  DELETE_SYM                    /* SQL-2003-R */
+%token  DENSE_RANK_SYM
 %token  DESC                          /* SQL-2003-N */
 %token  DESCRIBE                      /* SQL-2003-R */
 %token  DES_KEY_FILE
@@ -1197,6 +1206,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  EVERY_SYM                     /* SQL-2003-N */
 %token  EXCHANGE_SYM
 %token  EXAMINED_SYM
+%token  EXCLUDE_SYM
 %token  EXECUTE_SYM                   /* SQL-2003-R */
 %token  EXISTS                        /* SQL-2003-R */
 %token  EXIT_SYM
@@ -1215,6 +1225,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  FLOAT_NUM
 %token  FLOAT_SYM                     /* SQL-2003-R */
 %token  FLUSH_SYM
+%token  FOLLOWING_SYM
 %token  FORCE_SYM
 %token  FOREIGN                       /* SQL-2003-R */
 %token  FOR_SYM                       /* SQL-2003-R */
@@ -1411,9 +1422,11 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  ORDER_SYM                     /* SQL-2003-R */
 %token  OR_OR_SYM                     /* OPERATOR */
 %token  OR_SYM                        /* SQL-2003-R */
+%token  OTHERS_SYM            
 %token  OUTER
 %token  OUTFILE
 %token  OUT_SYM                       /* SQL-2003-R */
+%token  OVER_SYM
 %token  OWNER_SYM
 %token  PACK_KEYS_SYM
 %token  PAGE_SYM
@@ -1426,6 +1439,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  PARTITIONS_SYM
 %token  PARTITIONING_SYM
 %token  PASSWORD_SYM
+%token  PERCENT_RANK_SYM
 %token  PERSISTENT_SYM
 %token  PHASE_SYM
 %token  PLUGINS_SYM
@@ -1434,6 +1448,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  POLYGON
 %token  PORT_SYM
 %token  POSITION_SYM                  /* SQL-2003-N */
+%token  PRECEDING_SYM
 %token  PRECISION                     /* SQL-2003-R */
 %token  PREPARE_SYM                   /* SQL-2003-R */
 %token  PRESERVE_SYM
@@ -1451,6 +1466,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  QUERY_SYM
 %token  QUICK
 %token  RANGE_SYM                     /* SQL-2003-R */
+%token  RANK_SYM        
 %token  READS_SYM                     /* SQL-2003-R */
 %token  READ_ONLY_SYM
 %token  READ_SYM                      /* SQL-2003-N */
@@ -1500,6 +1516,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  ROW_FORMAT_SYM
 %token  ROW_SYM                       /* SQL-2003-R */
 %token  ROW_COUNT_SYM                 /* SQL-2003-N */
+%token  ROW_NUMBER_SYM
 %token  RTREE_SYM
 %token  SAVEPOINT_SYM                 /* SQL-2003-R */
 %token  SCHEDULE_SYM
@@ -1590,6 +1607,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  TEXT_SYM
 %token  THAN_SYM
 %token  THEN_SYM                      /* SQL-2003-R */
+%token  TIES_SYM
 %token  TIMESTAMP                     /* SQL-2003-R */
 %token  TIMESTAMP_ADD
 %token  TIMESTAMP_DIFF
@@ -1610,6 +1628,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  TYPE_SYM                      /* SQL-2003-N */
 %token  UDF_RETURNS_SYM
 %token  ULONGLONG_NUM
+%token  UNBOUNDED_SYM
 %token  UNCOMMITTED_SYM               /* SQL-2003-N */
 %token  UNDEFINED_SYM
 %token  UNDERSCORE_CHARSET
@@ -1651,6 +1670,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  WEIGHT_STRING_SYM
 %token  WHEN_SYM                      /* SQL-2003-R */
 %token  WHERE                         /* SQL-2003-R */
+%token  WINDOW_SYM
 %token  WHILE_SYM
 %token  WITH                          /* SQL-2003-R */
 %token  WITH_CUBE_SYM                 /* INTERNAL */
@@ -1777,6 +1797,9 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
         simple_ident_nospvar simple_ident_q
         field_or_var limit_option
         part_func_expr
+        window_func_expr
+        window_func
+        simple_window_func
         function_call_keyword
         function_call_nonkeyword
         function_call_generic
@@ -1963,6 +1986,15 @@ END_OF_INPUT
 %type <cond_info_item> condition_information_item;
 %type <cond_info_item_name> condition_information_item_name;
 %type <cond_info_list> condition_information;
+
+%type <NONE> window_clause window_def_list window_def window_spec
+%type <lex_str_ptr> window_name opt_window_ref
+%type <window_frame> opt_window_frame_clause;
+%type <frame_units> window_frame_units;
+%type <NONE> window_frame_extent;
+%type <frame_exclusion> opt_window_frame_exclusion;
+%type <window_frame_bound> window_frame_start window_frame_bound;
+
 
 %type <NONE>
         '-' '+' '*' '/' '%' '(' ')'
@@ -8443,7 +8475,7 @@ select_from:
               Select->context.first_name_resolution_table=
                 Select->table_list.first;
           }
-          where_clause group_clause having_clause
+          where_clause group_clause having_clause window_clause
           opt_order_clause opt_limit_clause procedure_clause
         | FROM DUAL_SYM where_clause opt_limit_clause
           /* oracle compatibility: oracle always requires FROM clause,
@@ -9194,6 +9226,7 @@ simple_expr:
         | param_marker { $$= $1; }
         | variable
         | sum_expr
+        | window_func_expr
         | simple_expr OR_OR_SYM simple_expr
           {
             $$= new (thd->mem_root) Item_func_concat($1, $3);
@@ -10321,6 +10354,76 @@ sum_expr:
           }
         ;
 
+window_func_expr:
+          window_func OVER_SYM window_name
+          {
+            $$= new (thd->mem_root) Item_window_func((Item_sum *) $1, 
+                                                      thd->lex->win_spec);
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        |
+          window_func OVER_SYM window_spec
+          {
+            $$= new (thd->mem_root) Item_window_func((Item_sum *) $1,
+                                                      thd->lex->win_spec); 
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        ;
+
+window_func:
+          simple_window_func
+        |
+          sum_expr
+        ;
+
+simple_window_func:
+          ROW_NUMBER_SYM '(' ')'
+          {
+            $$= new (thd->mem_root) Item_sum_row_number();
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        |
+          RANK_SYM '(' ')'
+          {
+            $$= new (thd->mem_root) Item_sum_rank();
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        |
+          DENSE_RANK_SYM '(' ')'
+          {
+            $$= new (thd->mem_root) Item_sum_dense_rank();
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        |
+          PERCENT_RANK_SYM '(' ')'
+          {
+            $$= new (thd->mem_root) Item_sum_percent_rank();
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        |
+          CUME_DIST_SYM '(' ')'
+          {
+            $$= new (thd->mem_root) Item_sum_cume_dist();
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        ;
+
+window_name:
+          ident
+          {
+            $$= (LEX_STRING *) thd->memdup(&$1, sizeof(LEX_STRING));
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        ;
+
 variable:
           '@'
           {
@@ -11263,6 +11366,127 @@ olap_opt:
           }
         ;
 
+/*
+   window clause in select
+*/
+
+window_clause:
+          /* empty */
+          { }
+        | WINDOW_SYM
+          window_def_list
+        ;
+
+window_def_list:
+          window_def_list ',' window_def
+        | window_def
+        ;
+
+window_def:
+          window_name AS window_spec
+          { if (Select->add_window_def(thd, $1)) MYSQL_YYABORT; }
+        ;
+
+window_spec:
+          '(' 
+          { Select->prepare_add_window_spec(thd); }
+          opt_window_ref opt_window_partition_clause
+          opt_window_order_clause opt_window_frame_clause
+          ')'
+        ;
+
+opt_window_ref:
+          /* empty */ { $$= 0; }
+        | ident
+          {
+            $$= (LEX_STRING *) thd->memdup(&$1, sizeof(LEX_STRING));
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+
+opt_window_partition_clause:
+          /* empty */ { }
+        | PARTITION_SYM BY group_list
+        ;
+
+opt_window_order_clause:
+          /* empty */ { }
+        | ORDER_SYM BY order_list
+        ;
+
+opt_window_frame_clause:
+          /* empty */ { $$= 0; }
+        | window_frame_units window_frame_extent opt_window_frame_exclusion
+          {
+            $$= new (thd->mem_root) Window_frame($1,
+                                                 thd->lex->frame_upper_bound,
+                                                 thd->lex->frame_lower_bound,
+                                                 $3);
+            if ($$ == NULL)
+              MYSQL_YYABORT;
+          }
+        ;
+
+window_frame_units:
+          ROWS_SYM { $$= Window_frame::UNITS_ROWS; }
+        | RANGE_SYM { $$= Window_frame::UNITS_RANGE; }
+        ;
+         
+window_frame_extent:
+          window_frame_start
+          {
+            thd->lex->frame_lower_bound= $1;
+            thd->lex->frame_upper_bound->precedence_type=
+              Window_frame_bound::PRECEDING;
+            thd->lex->frame_upper_bound->offset= (Item *) 0;
+          }
+        | BETWEEN_SYM window_frame_bound AND_SYM window_frame_bound
+          {
+            thd->lex->frame_lower_bound= $2;
+            thd->lex->frame_upper_bound= $4;
+          }
+        ;
+
+window_frame_start:
+          UNBOUNDED_SYM PRECEDING_SYM
+          {
+            $$->precedence_type= Window_frame_bound::PRECEDING; 
+            $$->offset= (Item *) 1;
+          } 
+        | CURRENT_SYM ROW_SYM { $$->offset= (Item *) 0; }
+        | literal PRECEDING_SYM
+          {
+            $$->precedence_type= Window_frame_bound::PRECEDING;
+            $$->offset= $1;
+          }
+        ;
+
+window_frame_bound:
+          window_frame_start { $$= $1; }
+        | UNBOUNDED_SYM FOLLOWING_SYM        
+          {
+            $$->precedence_type= Window_frame_bound::FOLLOWING; 
+            $$->offset= (Item *) 1;
+          } 
+        | literal FOLLOWING_SYM
+          {
+            $$->precedence_type= Window_frame_bound::FOLLOWING;
+            $$->offset= $1;
+          }
+        ;
+
+opt_window_frame_exclusion:
+          /* empty */ { $$= Window_frame::EXCL_NONE; }
+        | EXCLUDE_SYM CURRENT_SYM ROW_SYM
+          { $$= Window_frame::EXCL_CURRENT_ROW; }
+        | EXCLUDE_SYM GROUP_SYM
+          { $$= Window_frame::EXCL_GROUP; }
+        | EXCLUDE_SYM TIES_SYM
+          { $$= Window_frame::EXCL_TIES; }
+        | EXCLUDE_SYM NO_SYM OTHERS_SYM
+          { $$= Window_frame::EXCL_NONE; }
+        ;      
+       
 /*
   Order by statement in ALTER TABLE
 */
