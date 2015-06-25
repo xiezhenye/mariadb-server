@@ -30,6 +30,8 @@
 #include "unireg.h"                    // REQUIRED: for other includes
 #include "protocol.h"
 #include "sql_class.h"                          // THD
+#include "sql_window.h"
+#include "item_windowfunc.h"
 #include <stdarg.h>
 
 static const unsigned int PACKET_BUFFER_EXTRA_ALLOC= 1024;
