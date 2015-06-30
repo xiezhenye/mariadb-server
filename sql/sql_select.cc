@@ -2437,7 +2437,8 @@ void JOIN::exec_inner()
     }
     columns_list= &procedure_fields_list;
   }
-  (void) result->prepare2(); // Currently, this cannot fail.
+  if (result->prepare2())
+    DBUG_VOID_RETURN;
 
   if (!tables_list && (table_count || !select_lex->with_sum_func))
   {                                           // Only test of functions
@@ -4758,8 +4759,7 @@ Item_func_like::add_key_fields(JOIN *join, KEY_FIELD **key_fields,
                                uint *and_level, table_map usable_tables,
                                SARGABLE_PARAM **sargables)
 {
-  if (is_local_field(args[0]) &&
-      Item_func_like::select_optimize() == OPTIMIZE_OP)
+  if (is_local_field(args[0]) && with_sargable_pattern())
   {
     /*
       SELECT * FROM t1 WHERE field LIKE const_pattern
@@ -4773,11 +4773,11 @@ Item_func_like::add_key_fields(JOIN *join, KEY_FIELD **key_fields,
 
 
 void
-Item_bool_func::add_key_fields_optimize_op(JOIN *join, KEY_FIELD **key_fields,
-                                           uint *and_level,
-                                           table_map usable_tables,
-                                           SARGABLE_PARAM **sargables,
-                                           bool equal_func)
+Item_bool_func2::add_key_fields_optimize_op(JOIN *join, KEY_FIELD **key_fields,
+                                            uint *and_level,
+                                            table_map usable_tables,
+                                            SARGABLE_PARAM **sargables,
+                                            bool equal_func)
 {
   /* If item is of type 'field op field/constant' add it to key_fields */
   if (is_local_field(args[0]))
@@ -9802,10 +9802,24 @@ make_join_select(JOIN *join,SQL_SELECT *select,COND *cond)
 	  if (!sel->quick_keys.is_subset(tab->checked_keys) ||
               !sel->needed_reg.is_subset(tab->checked_keys))
 	  {
+            /*
+              "Range checked for each record" is a "last resort" access method
+              that should only be used when the other option is a cross-product
+              join.
+
+              We use the following condition (it's approximate):
+              1. There are potential keys for (sel->needed_reg)
+              2. There were no possible ways to construct a quick select, or
+                 the quick select would be more expensive than the full table
+                 scan.
+            */
 	    tab->use_quick= (!sel->needed_reg.is_clear_all() &&
 			     (sel->quick_keys.is_clear_all() ||
-			      (sel->quick &&
-			       (sel->quick->records >= 100L)))) ?
+                              (sel->quick && 
+                               sel->quick->read_time > 
+                               tab->table->file->scan_time() + 
+                               tab->table->file->stats.records/TIME_FOR_COMPARE
+                               ))) ?
 	      2 : 1;
 	    sel->read_tables= used_tables & ~current_map;
             sel->quick_keys.clear_all();
@@ -12565,7 +12579,7 @@ static bool check_simple_equality(THD *thd, Item *left_item, Item *right_item,
           Item_func_eq *eq_item;
           if (!(eq_item= new (thd->mem_root) Item_func_eq(orig_left_item,
                                                           orig_right_item)) ||
-              eq_item->set_cmp_func())
+              eq_item->set_cmp_func_and_arg_cmp_context())
             return FALSE;
           eq_item->quick_fix_field();
           item= eq_item;
@@ -12659,7 +12673,7 @@ static bool check_row_equality(THD *thd, Item *left_row, Item_row *right_row,
     {
       Item_func_eq *eq_item;
       if (!(eq_item= new Item_func_eq(left_item, right_item)) ||
-          eq_item->set_cmp_func())
+          eq_item->set_cmp_func_and_arg_cmp_context())
         return FALSE;
       eq_item->quick_fix_field();
       eq_list->push_back(eq_item);
