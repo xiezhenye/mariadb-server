@@ -349,6 +349,7 @@ retry_event_group(rpl_group_info *rgi, rpl_parallel_thread *rpt,
   ulong retries= 0;
   Format_description_log_event *description_event= NULL;
   ulonglong *prev_phase;
+  bool need_reregister;
 
   prev_phase= thd->update_slave_time_status(&slave_parallel_trx_retry);
 
@@ -418,18 +419,66 @@ do_retry:
 
   for (;;)
   {
-    mysql_mutex_lock(&entry->LOCK_parallel_entry);
-    register_wait_for_prior_event_group_commit(rgi, entry);
-    mysql_mutex_unlock(&entry->LOCK_parallel_entry);
+    uint64_t deadlock_sub_id;
+    wait_for_commit *deadlock_wfc;
 
     /*
-      Let us wait for all prior transactions to complete before trying again.
+      Let us wait for prior transactions to complete before trying again.
       This way, we avoid repeatedly conflicting with and getting deadlock
       killed by the same earlier transaction.
+
+      In aggressive mode, we only wait for the transaction that we actually
+      conflicted with, if we have a reference to it. In other modes, we
+      wait for all prior transactions to commit, to avoid potentially getting
+      multiple deadlock kills against multiple prior transactions (since we
+      already conflicted with one transaction, there might be increased risk
+      of more conflicts).
+
+      In aggressive mode we fall back to waiting for all prior transactions if
+      we reach slave_trans_retries/2, to avoid excessive retries causing
+      replication to fail.
     */
+    mysql_mutex_lock(&thd->LOCK_thd_data);
+    deadlock_sub_id= rgi->deadlock_kill_wait_commit_sub_id;
+    deadlock_wfc= rgi->deadlock_kill_wfc;
+    rgi->deadlock_kill_wfc= NULL;
+    mysql_mutex_unlock(&thd->LOCK_thd_data);
+    mysql_mutex_lock(&entry->LOCK_parallel_entry);
+    if (deadlock_wfc && rli->mi->parallel_mode >= SLAVE_PARALLEL_AGGRESSIVE &&
+        retries < slave_trans_retries/2)
+    {
+      if (deadlock_sub_id > entry->last_committed_sub_id)
+        rgi->commit_orderer.register_wait_for_prior_commit(deadlock_wfc);
+      need_reregister= true;
+    }
+    else
+    {
+      register_wait_for_prior_event_group_commit(rgi, entry);
+      need_reregister= false;
+    }
+    mysql_mutex_unlock(&entry->LOCK_parallel_entry);
+
     if (!(err= thd->wait_for_prior_commit(&slave_parallel_wait_retry)))
     {
-      rgi->speculation = rpl_group_info::SPECULATE_WAIT;
+      if (need_reregister)
+      {
+        /*
+          If we waited for an earlier transaction before retrying, now we have
+          to re-register to wait for the immediately prior transaction, to
+          preserve commit order.
+        */
+        mysql_mutex_lock(&entry->LOCK_parallel_entry);
+        register_wait_for_prior_event_group_commit(rgi, entry);
+        mysql_mutex_unlock(&entry->LOCK_parallel_entry);
+      }
+      else
+      {
+        /*
+          We already waited for the immediately prior transaction to have
+          completed its commit. No need to wait again.
+        */
+        rgi->speculation = rpl_group_info::SPECULATE_WAIT;
+      }
       break;
     }
 
@@ -459,6 +508,7 @@ do_retry:
     possibility of an old deadlock kill lingering on beyond this point.
   */
   thd->reset_killed();
+  thd->tx_isolation= (enum_tx_isolation)thd->variables.tx_isolation;
 
   strmake_buf(log_name, ir->name);
   if ((fd= open_binlog(&rlog, log_name, &errmsg)) <0)
@@ -1416,6 +1466,7 @@ rpl_parallel_thread::get_rgi(Relay_log_info *rli, Gtid_log_event *gtid_ev,
   rgi->retry_start_offset= rli->future_event_relay_log_pos-event_size;
   rgi->retry_event_count= 0;
   rgi->killed_for_retry= false;
+  rgi->deadlock_kill_wfc= NULL;
 
   return rgi;
 }
