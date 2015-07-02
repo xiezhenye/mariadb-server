@@ -1782,14 +1782,14 @@ struct wait_for_commit
   bool commit_started;
 
   void register_wait_for_prior_commit(wait_for_commit *waitee);
-  int wait_for_prior_commit(THD *thd)
+  int wait_for_prior_commit(THD *thd, ulonglong *status_var)
   {
     /*
       Quick inline check, to avoid function call and locking in the common case
       where no wakeup is registered, or a registered wait was already signalled.
     */
     if (waitee)
-      return wait_for_prior_commit2(thd);
+      return wait_for_prior_commit2(thd, status_var);
     else
     {
       if (wakeup_error)
@@ -1843,7 +1843,7 @@ struct wait_for_commit
 
   void wakeup(int wakeup_error);
 
-  int wait_for_prior_commit2(THD *thd);
+  int wait_for_prior_commit2(THD *thd, ulonglong *status_var);
   void wakeup_subsequent_commits2(int wakeup_error);
   void unregister_wait_for_prior_commit2();
 
@@ -2066,6 +2066,8 @@ public:
   // track down slow pthread_create
   ulonglong  prior_thr_create_utime, thr_create_utime;
   ulonglong  start_utime, utime_after_lock, utime_after_query;
+  ulonglong slave_worker_phase_start_time;
+  ulonglong *slave_worker_next_phase;
 
   // Process indicator
   struct {
@@ -3074,6 +3076,39 @@ public:
     if (utime_after_query > utime_after_lock + variables.long_query_time)
       server_status|= SERVER_QUERY_WAS_SLOW;
   }
+
+  /**
+     Update time status variables for parallel replication worker threads.
+
+     status_var is the status variable for the _following_ phase. This call
+     will update the status variable passed into the previous call. The status
+     variable passed in here will be updated with the time that passed at the
+     next call.
+
+     The idea is that at the start of a new phase, worker threads call this
+     function, and the status is updated with the time that was spent in the
+     previous phase, whatever it was.
+
+     The status variable to update is one of slave_parallel_idle,
+     slave_parallel_processing, slave_parallel_trx_retry,
+     slave_parallel_wait_group, slave_parallel_wait_prior, or
+     slave_parallel_wait_duplicate_gtid.
+
+     The old status variable is returned (can be used to temporarily measure a
+     specific phase, then go back to the previous phase, whatever it was).
+  */
+  inline ulonglong *update_slave_time_status(ulonglong *next_status_var)
+  {
+    ulonglong *current_status_var= slave_worker_next_phase;
+    ulonglong new_time= microsecond_interval_timer();
+    if (current_status_var)
+      statistic_add(*current_status_var,
+                    new_time - slave_worker_phase_start_time, &LOCK_status);
+    slave_worker_next_phase= next_status_var;
+    slave_worker_phase_start_time= new_time;
+    return current_status_var;
+  }
+
   inline ulonglong found_rows(void)
   {
     return limit_found_rows;
@@ -3829,10 +3864,10 @@ public:
   }
 
   wait_for_commit *wait_for_commit_ptr;
-  int wait_for_prior_commit()
+  int wait_for_prior_commit(ulonglong *status_var)
   {
     if (wait_for_commit_ptr)
-      return wait_for_commit_ptr->wait_for_prior_commit(this);
+      return wait_for_commit_ptr->wait_for_prior_commit(this, status_var);
     return 0;
   }
   void wakeup_subsequent_commits(int wakeup_error)

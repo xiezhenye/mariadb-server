@@ -5957,7 +5957,7 @@ bool MYSQL_BIN_LOG::write(Log_event *event_info, my_bool *with_annotate)
       int res;
       uint64 commit_id= 0;
       DBUG_PRINT("info", ("direct is set"));
-      if ((res= thd->wait_for_prior_commit()))
+      if ((res= thd->wait_for_prior_commit(&slave_parallel_wait_prior)))
         DBUG_RETURN(res);
       file= &log_file;
       my_org_b_tell= my_b_tell(file);
@@ -6975,6 +6975,8 @@ MYSQL_BIN_LOG::queue_for_group_commit(group_commit_entry *orig_entry)
   orig_entry->queued_by_other= false;
   if (wfc && wfc->waitee)
   {
+    ulonglong *prev_phase=
+      orig_entry->thd->update_slave_time_status(&slave_parallel_wait_prior);
     mysql_mutex_lock(&wfc->LOCK_wait_commit);
     /*
       Do an extra check here, this time safely under lock.
@@ -7052,6 +7054,7 @@ MYSQL_BIN_LOG::queue_for_group_commit(group_commit_entry *orig_entry)
     }
     else
       mysql_mutex_unlock(&wfc->LOCK_wait_commit);
+    orig_entry->thd->update_slave_time_status(prev_phase);
   }
   /*
     If the transaction we were waiting for has already put us into the group
@@ -7305,7 +7308,7 @@ MYSQL_BIN_LOG::write_transaction_to_binlog_events(group_commit_entry *entry)
   }
 
   if (likely(!entry->error))
-    return entry->thd->wait_for_prior_commit();
+    return entry->thd->wait_for_prior_commit(&slave_parallel_wait_prior);
 
   switch (entry->error)
   {
@@ -8439,7 +8442,7 @@ int TC_LOG_MMAP::log_and_order(THD *thd, my_xid xid, bool all,
     mysql_mutex_unlock(&LOCK_prepare_ordered);
   }
 
-  if (thd->wait_for_prior_commit())
+  if (thd->wait_for_prior_commit(&slave_parallel_wait_prior))
     return 0;
 
   cookie= 0;

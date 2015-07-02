@@ -1618,7 +1618,7 @@ use_temporary_table(THD *thd, TABLE *table, TABLE **out_table)
     in any case rather fragile.
   */
   if (thd->rgi_slave && thd->rgi_slave->is_parallel_exec &&
-      thd->wait_for_prior_commit())
+      thd->wait_for_prior_commit(&slave_parallel_wait_dependency))
     return true;
   /*
     We need to set the THD as it may be different in case of
@@ -5660,7 +5660,7 @@ TABLE *open_table_uncached(THD *thd, handlerton *hton,
   {
     /* Temporary tables are not safe for parallel replication. */
     if (thd->rgi_slave && thd->rgi_slave->is_parallel_exec &&
-        thd->wait_for_prior_commit())
+        thd->wait_for_prior_commit(&slave_parallel_wait_dependency))
       DBUG_RETURN(NULL);
   }
 
@@ -5928,7 +5928,7 @@ bool open_temporary_table(THD *thd, TABLE_LIST *tl)
     in any case rather fragile.
   */
   if (thd->rgi_slave && thd->rgi_slave->is_parallel_exec &&
-      thd->wait_for_prior_commit())
+      thd->wait_for_prior_commit(&slave_parallel_wait_dependency))
     DBUG_RETURN(true);
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE

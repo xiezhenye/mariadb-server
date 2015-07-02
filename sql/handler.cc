@@ -1533,7 +1533,7 @@ int ha_commit_one_phase(THD *thd, bool all)
   if (is_real_trans)
   {
     DEBUG_SYNC(thd, "ha_commit_one_phase");
-    if ((res= thd->wait_for_prior_commit()))
+    if ((res= thd->wait_for_prior_commit(&slave_parallel_wait_prior)))
       DBUG_RETURN(res);
   }
   res= commit_one_phase_2(thd, all, trans, is_real_trans);
