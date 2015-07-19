@@ -572,6 +572,7 @@ ulong opt_slave_parallel_mode= SLAVE_PARALLEL_CONSERVATIVE;
 ulong opt_binlog_commit_wait_count= 0;
 ulong opt_binlog_commit_wait_usec= 0;
 ulong opt_slave_parallel_max_queued= 131072;
+my_bool opt_slave_parallel_aggressive_retry= FALSE;
 my_bool opt_gtid_ignore_duplicates= FALSE;
 
 const double log_10[] = {

@@ -215,6 +215,7 @@ extern ulong opt_slave_parallel_max_queued;
 extern ulong opt_slave_parallel_mode;
 extern ulong opt_binlog_commit_wait_count;
 extern ulong opt_binlog_commit_wait_usec;
+extern my_bool opt_slave_parallel_aggressive_retry;
 extern my_bool opt_gtid_ignore_duplicates;
 extern ulong back_log;
 extern ulong executed_events;

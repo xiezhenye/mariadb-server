@@ -1972,6 +1972,18 @@ static Sys_var_slave_parallel_mode Sys_slave_parallel_mode(
        slave_parallel_mode_names, DEFAULT(SLAVE_PARALLEL_CONSERVATIVE));
 
 
+static Sys_var_mybool Sys_slave_parallel_aggressive_retry(
+       "slave_parallel_aggressive_retry",
+       "When set, deadlocked transactions in aggressive mode will be retried "
+       "immediately after the conflicting prior transaction has committed, "
+       "as opposed to only after all prior transactions. This means that "
+       "a transaction can repeatedly deadlock (up to half the value of "
+       "--slave_trans_retries), but might allow a deadlocked transaction "
+       "to finish earlier if there are no further deadlocks.",
+       GLOBAL_VAR(opt_slave_parallel_aggressive_retry), CMD_LINE(OPT_ARG),
+       DEFAULT(FALSE), NO_MUTEX_GUARD, NOT_IN_BINLOG);
+
+
 static Sys_var_bit Sys_skip_parallel_replication(
        "skip_parallel_replication",
        "If set when a transaction is written to the binlog, parallel apply of "

@@ -445,7 +445,7 @@ do_retry:
     mysql_mutex_unlock(&thd->LOCK_thd_data);
     mysql_mutex_lock(&entry->LOCK_parallel_entry);
     if (deadlock_wfc && rli->mi->parallel_mode >= SLAVE_PARALLEL_AGGRESSIVE &&
-        retries < slave_trans_retries/2)
+        retries < slave_trans_retries/2 && opt_slave_parallel_aggressive_retry)
     {
       if (deadlock_sub_id > entry->last_committed_sub_id)
         rgi->commit_orderer.register_wait_for_prior_commit(deadlock_wfc);
