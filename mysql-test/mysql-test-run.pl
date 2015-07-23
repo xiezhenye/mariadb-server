@@ -2700,7 +2700,7 @@ sub setup_vardir() {
     else
     {
       my $opt_use_copy= 1;
-      if (symlink "$opt_vardir/run", "$plugindir/symlink_test")
+      if (eval {symlink "$opt_vardir/run", "$plugindir/symlink_test"})
       {
         $opt_use_copy= 0;
         unlink "$plugindir/symlink_test";
