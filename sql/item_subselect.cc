@@ -464,6 +464,7 @@ void Item_subselect::recalc_used_tables(st_select_lex *new_parent,
 {
   List_iterator<Ref_to_outside> it(upper_refs);
   Ref_to_outside *upper;
+  DBUG_ENTER("recalc_used_tables");
   
   used_tables_cache= 0;
   while ((upper= it++))
@@ -523,6 +524,8 @@ void Item_subselect::recalc_used_tables(st_select_lex *new_parent,
     he has done const table detection, and that will be our chance to update
     const_tables_cache.
   */
+  DBUG_PRINT("exit", ("used_tables_cache: %llx", used_tables_cache));
+  DBUG_VOID_RETURN;
 }
 
 
@@ -1989,7 +1992,7 @@ bool Item_allany_subselect::is_maxmin_applicable(JOIN *join)
 */
 
 bool
-Item_in_subselect::create_single_in_to_exists_cond(JOIN * join,
+Item_in_subselect::create_single_in_to_exists_cond(JOIN *join,
                                                    Item **where_item,
                                                    Item **having_item)
 {
@@ -1999,11 +2002,41 @@ Item_in_subselect::create_single_in_to_exists_cond(JOIN * join,
     during JOIN::optimize: this->tmp_having= this->having; this->having= 0;
   */
   Item* join_having= join->having ? join->having : join->tmp_having;
-
   DBUG_ENTER("Item_in_subselect::create_single_in_to_exists_cond");
 
   *where_item= NULL;
   *having_item= NULL;
+
+  /*
+    For PS we have to do fix_fields(expr) here to ensure that it's
+    evaluated in the outer context.  If not, then fix_having() will do
+    a fix_fields(expr) in the inner context and mark expr as
+    'depended', which will cause update_ref_and_keys() to find wrong
+    keys.
+    When not running PS, fix_fields(expr) as already been done earlier and
+    the following test does nothing.
+  */
+  if (expr && !expr->fixed)
+  {
+    bool tmp;
+    SELECT_LEX *save_current_select= thd->lex->current_select;
+    Item_subselect *save_item;
+
+    thd->lex->current_select= thd->lex->current_select->outer_select();
+    /*
+      For st_select_lex::mark_as_dependent, who needs to mark
+      this sub query as correlated.
+    */
+    save_item= thd->lex->current_select->master_unit()->item;
+    thd->lex->current_select->master_unit()->item= this;
+
+    tmp= expr->fix_fields(thd, 0);
+
+    thd->lex->current_select->master_unit()->item= save_item;
+    thd->lex->current_select= save_current_select;
+    if (tmp)
+      DBUG_RETURN(true);
+  }
 
   if (join_having || select_lex->with_sum_func ||
       select_lex->group_list.elements)

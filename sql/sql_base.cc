@@ -1,5 +1,5 @@
-/* Copyright (c) 2000, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2013 Monty Program Ab
+/* Copyright (c) 2000, 2015, Oracle and/or its affiliates.
+   Copyright (c) 2010, 2015, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -643,7 +643,8 @@ found:
     open_table_error(share, share->error, share->open_errno, share->errarg);
     DBUG_RETURN(0);
   }
-  if (share->is_view && !(db_flags & OPEN_VIEW))
+  if ((share->is_view && !(db_flags & OPEN_VIEW)) ||
+      (!share->is_view && (db_flags & OPEN_VIEW_ONLY)))
   {
     open_table_error(share, 1, ENOENT, 0);
     DBUG_RETURN(0);
@@ -3027,7 +3028,11 @@ retry_share:
   mysql_mutex_lock(&LOCK_open);
 
   if (!(share= get_table_share_with_discover(thd, table_list, key,
-                                             key_length, OPEN_VIEW,
+                                             key_length,
+                                             (OPEN_VIEW |
+                                              ((table_list->required_type ==
+                                                FRMTYPE_VIEW) ?
+                                               OPEN_VIEW_ONLY : 0)),
                                              &error,
                                              hash_value)))
   {
@@ -4106,7 +4111,7 @@ request_backoff_action(enum_open_table_action action_arg,
   if (action_arg != OT_REOPEN_TABLES && m_has_locks)
   {
     my_error(ER_LOCK_DEADLOCK, MYF(0));
-    mark_transaction_to_rollback(m_thd, true);
+    m_thd->mark_transaction_to_rollback(true);
     return TRUE;
   }
   /*
@@ -6854,6 +6859,7 @@ find_field_in_tables(THD *thd, Item_ident *item,
 
   if (item->cached_table)
   {
+    DBUG_PRINT("info", ("using cached table"));
     /*
       This shortcut is used by prepared statements. We assume that
       TABLE_LIST *first_table is not changed during query execution (which
@@ -6930,8 +6936,6 @@ find_field_in_tables(THD *thd, Item_ident *item,
       return found;
     }
   }
-  else
-    item->can_be_depended= TRUE;
 
   if (db && lower_case_table_names)
   {
@@ -7256,7 +7260,7 @@ find_item_in_list(Item *find, List<Item> &items, uint *counter,
         Item_field for tables.
       */
       Item_ident *item_ref= (Item_ident *) item;
-      if (item_ref->name && item_ref->table_name &&
+      if (field_name && item_ref->name && item_ref->table_name &&
           !my_strcasecmp(system_charset_info, item_ref->name, field_name) &&
           !my_strcasecmp(table_alias_charset, item_ref->table_name,
                          table_name) &&
@@ -8286,9 +8290,10 @@ bool setup_tables(THD *thd, Name_resolution_context *context,
   if (select_lex->first_cond_optimization)
   {
     leaves.empty();
-    if (!select_lex->is_prep_leaf_list_saved)
+    if (select_lex->prep_leaf_list_state != SELECT_LEX::SAVED)
     {
       make_leaves_list(leaves, tables, full_table_list, first_select_table);
+      select_lex->prep_leaf_list_state= SELECT_LEX::READY;
       select_lex->leaf_tables_exec.empty();
     }
     else

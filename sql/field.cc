@@ -2483,7 +2483,7 @@ void Field_decimal::sql_type(String &res) const
   if (dec)
     tmp--;
   res.length(cs->cset->snprintf(cs,(char*) res.ptr(),res.alloced_length(),
-			  "decimal(%d,%d)",tmp,dec));
+			  "decimal(%d,%d)/*old*/",tmp,dec));
   add_zerofill_and_unsigned(res);
 }
 
@@ -7612,7 +7612,8 @@ int Field_geom::store(const char *from, uint length, CHARSET_INFO *cs)
     }
 
     Field_blob::store_length(length);
-    if (table->copy_blobs || length <= MAX_FIELD_WIDTH)
+    if ((table->copy_blobs || length <= MAX_FIELD_WIDTH) &&
+        from != value.ptr())
     {						// Must make a copy
       value.copy(from, length, cs);
       from= value.ptr();
@@ -7627,6 +7628,14 @@ err:
 err_exit:
   bzero(ptr, Field_blob::pack_length());  
   return -1;
+}
+
+Field::geometry_type Field_geom::geometry_type_merge(geometry_type a,
+                                                            geometry_type b)
+{
+  if (a == b)
+    return a;
+  return Field::GEOM_GEOMETRY;
 }
 
 #endif /*HAVE_SPATIAL*/

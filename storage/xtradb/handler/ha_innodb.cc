@@ -102,7 +102,6 @@ extern "C" {
 #include "ibuf0ibuf.h"
 
 enum_tx_isolation thd_get_trx_isolation(const THD* thd);
-
 }
 
 #include "ha_innodb.h"
@@ -1854,6 +1853,7 @@ check_trx_exists(
 
 	if (trx == NULL) {
 		trx = innobase_trx_allocate(thd);
+		thd_set_ha_data(thd, innodb_hton_ptr, trx);
 	} else if (UNIV_UNLIKELY(trx->magic_n != TRX_MAGIC_N)) {
 		mem_analyze_corruption(trx);
 		ut_error;
@@ -7327,6 +7327,11 @@ ha_innobase::general_fetch(
 
 	DBUG_ENTER("general_fetch");
 
+	/* If transaction is not startted do not continue, instead return a error code. */
+	if(!(prebuilt->sql_stat_start || (prebuilt->trx && prebuilt->trx->state == 1))) {
+		DBUG_RETURN(HA_ERR_END_OF_FILE);
+	}
+
 	if (UNIV_UNLIKELY(share->ib_table->is_corrupt &&
 			  srv_pass_corrupt_table <= 1)) {
 		DBUG_RETURN(HA_ERR_CRASHED);
@@ -11718,10 +11723,8 @@ ha_innobase::cmp_ref(
 			len1 = innobase_read_from_2_little_endian(ref1);
 			len2 = innobase_read_from_2_little_endian(ref2);
 
-			ref1 += 2;
-			ref2 += 2;
-			result = ((Field_blob*)field)->cmp( ref1, len1,
-                                                            ref2, len2);
+			result = ((Field_blob*)field)->cmp(ref1 + 2, len1,
+							   ref2 + 2, len2);
 		} else {
 			result = field->key_cmp(ref1, ref2);
 		}
@@ -14104,3 +14107,28 @@ ha_innobase::idx_cond_push(
 	DBUG_RETURN(NULL);
 }
 
+/********************************************************************//**
+Helper function to push warnings from InnoDB internals to SQL-layer. */
+extern "C" UNIV_INTERN
+void
+ib_push_warning(
+	trx_t*		trx,	/*!< in: trx */
+	ulint		error,	/*!< in: error code to push as warning */
+	const char	*format,/*!< in: warning message */
+	...)
+{
+	va_list args;
+	THD *thd = (THD *)trx->mysql_thd;
+	char *buf;
+#define MAX_BUF_SIZE 4*1024
+
+	va_start(args, format);
+	buf = (char *)my_malloc(MAX_BUF_SIZE, MYF(MY_WME));
+	vsprintf(buf,format, args);
+
+	push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
+		convert_error_code_to_mysql(error, 0, thd),
+		buf);
+	my_free(buf);
+	va_end(args);
+}
