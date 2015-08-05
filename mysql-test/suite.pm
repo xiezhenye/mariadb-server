@@ -31,6 +31,7 @@ sub skip_combinations {
     '18446744073709547520' => '32bit'
   );
   die "unknown value max-binlog-stmt-cache-size=$longsysvar" unless $val_map{$longsysvar};
+  $ENV{MTR_word_size} = ( $longsysvar == 18446744073709547520 ? '64' : ( $longsysvar == 4294963200 ? '32' : '' ) );
   $skip{'include/word_size.combinations'} = [ $val_map{$longsysvar} ];
 
   # as a special case, disable certain include files as a whole

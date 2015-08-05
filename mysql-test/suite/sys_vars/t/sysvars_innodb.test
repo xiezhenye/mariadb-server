@@ -1,14 +1,28 @@
 --source include/have_innodb.inc
 --source include/have_debug.inc
 --source include/not_valgrind.inc
---source include/word_size.inc
+--source include/platform.inc
 
 --vertical_results
---replace_regex /^\/\S+/PATH/ /\.\//PATH/
+
+# The version changes every release, so we will mask the value
+--let $innodb_version=`SELECT @@innodb_version`
+
+--replace_regex /^[\/\\]\S+/PATH/ /\.[\/\\]/PATH/ /^BIGINT\b/<INT or BIGINT>/ /^INT\b/<INT or BIGINT>/ /^(?:18446744073709551615\b|4294967295\b)/<32-bit or 64-bit MAX UNSIGNED>/ /^(?:9223372036854775807\b|2147483647\b)/<32-bit or 64-bit MAX SIGNED>/ /^(?:18446744073709547520\b|4294963200\b)/<32-bit or 64-bit MAX UNSIGNED ADJUSTED>/ /^(?:9223372036853727232\b|2146435072\b)/<32-bit or 64-bit MAX SIGNED ADJUSTED>/
+--replace_result $innodb_version '<InnoDB version>'
+
 select * from information_schema.system_variables
   where variable_name like 'innodb%' and
   variable_name not in (
-    'innodb_disallow_writes',           # only available WITH_WSREP
-    'innodb_sched_priority_cleaner',    # linux only
-    'innodb_use_native_aio')            # default value depends on OS
+    'innodb_adaptive_hash_index_partitions',  # max value is 32/64 depending on the word_size, see below
+    'innodb_disallow_writes',                 # only available WITH_WSREP
+    'innodb_use_native_aio')                  # default value depends on OS
   order by variable_name;
+
+--echo 
+
+--replace_regex /^BIGINT\b/<INT or BIGINT>/ /^INT\b/<INT or BIGINT>/ /^(?:18446744073709551615\b|4294967295\b)/<32-bit or 64-bit MAX UNSIGNED>/ /^(?:9223372036854775807\b|2147483647\b)/<32-bit or 64-bit MAX SIGNED>/ /^(?:18446744073709547520\b|4294963200\b)/<32-bit or 64-bit MAX UNSIGNED ADJUSTED>/ /^(?:9223372036853727232\b|2146435072\b)/<32-bit or 64-bit MAX SIGNED ADJUSTED>/
+--replace_result $MTR_word_size "<value equals the word size>"
+
+select * from information_schema.system_variables
+  where variable_name = 'innodb_adaptive_hash_index_partitions';

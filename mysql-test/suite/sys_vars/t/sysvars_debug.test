@@ -1,7 +1,10 @@
 --source include/have_debug.inc
---source include/word_size.inc
+--source include/platform.inc
 
 --vertical_results
+
+--replace_regex /^BIGINT\b/<INT or BIGINT>/ /^INT\b/<INT or BIGINT>/ /^(?:18446744073709551615\b|4294967295\b)/<32-bit or 64-bit MAX UNSIGNED>/ /^(?:9223372036854775807\b|2147483647\b)/<32-bit or 64-bit MAX SIGNED>/ /^(?:18446744073709547520\b|4294963200\b)/<32-bit or 64-bit MAX UNSIGNED ADJUSTED>/ /^(?:9223372036853727232\b|2146435072\b)/<32-bit or 64-bit MAX SIGNED ADJUSTED>/
+
 select * from information_schema.system_variables
   where variable_name like 'debug%'
   order by variable_name;
