@@ -211,6 +211,7 @@ static struct
 
   /* we disable few other plugins by default */
   ,{ "feedback", PLUGIN_OFF }
+  ,{ "file_key_management", PLUGIN_OFF }
 };
 
 /* support for Services */
