@@ -211,6 +211,7 @@ pfs_os_aio_func(
 				to write */
 	os_offset_t	offset,	/*!< in: file offset where to read or write */
 	ulint		n,	/*!< in: number of bytes to read or write */
+	ulint		page_size, /*!< in: page size in bytes */
 	fil_node_t*	message1,/*!< in: message for the aio handler
 				(can be used to identify a completed
 				aio operation); ignored if mode is
@@ -241,7 +242,7 @@ pfs_os_aio_func(
 				   src_file, src_line);
 
 	result = os_aio_func(type, is_log, mode, name, file, buf, offset,
-			     n, message1, message2, space_id, trx,
+			     n, page_size, message1, message2, space_id, trx,
 			     write_size);
 
 	register_pfs_file_io_end(locker, n);

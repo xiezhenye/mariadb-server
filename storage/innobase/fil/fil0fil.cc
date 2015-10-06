@@ -5225,7 +5225,7 @@ retry:
 #else
 		success = os_aio(OS_FILE_WRITE, 0, OS_AIO_SYNC,
 				 node->name, node->handle, buf,
-				 offset, page_size * n_pages,
+			         offset, page_size * n_pages, page_size,
 			         node, NULL, 0);
 #endif /* UNIV_HOTBACKUP */
 
@@ -5879,6 +5879,7 @@ fil_io(
 		buf,
 		offset,
 		len,
+		zip_size ? zip_size : UNIV_PAGE_SIZE,
 		node,
 		message,
 		write_size);

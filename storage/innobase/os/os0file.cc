@@ -204,7 +204,8 @@ struct os_aio_slot_t{
 					write */
 	byte*		buf;		/*!< buffer used in i/o */
 	ulint		type;		/*!< OS_FILE_READ or OS_FILE_WRITE */
-	ulint		is_log;		/*!< in: 1 is OS_FILE_LOG or 0 */
+	ulint		is_log;		/*!< 1 if OS_FILE_LOG or 0 */
+	ulint		page_size;      /*!< UNIV_PAGE_SIZE or zip_size */
 
 	os_offset_t	offset;		/*!< file offset in bytes */
 	os_file_t	file;		/*!< file where to read or write */
@@ -4484,6 +4485,7 @@ os_aio_array_reserve_slot(
 				to write */
 	os_offset_t	offset,	/*!< in: file offset */
 	ulint		len,	/*!< in: length of the block to read or write */
+	ulint           page_size, /*!< in: page size in bytes */
 	ulint*		write_size)/*!< in/out: Actual write size initialized
 			       after fist successfull trim
 			       operation for this page and if
@@ -4579,6 +4581,7 @@ found:
 	slot->io_already_done = FALSE;
 	slot->write_size = write_size;
 	slot->is_log   = is_log;
+	slot->page_size = page_size;
 
 	if (message1) {
 		slot->file_block_size = fil_node_get_block_size(message1);
@@ -4856,6 +4859,7 @@ os_aio_func(
 				to write */
 	os_offset_t	offset,	/*!< in: file offset where to read or write */
 	ulint		n,	/*!< in: number of bytes to read or write */
+	ulint           page_size, /*!< in: page size in bytes */
 	fil_node_t*	message1,/*!< in: message for the aio handler
 				(can be used to identify a completed
 				aio operation); ignored if mode is
@@ -4983,7 +4987,7 @@ try_again:
 	}
 
 	slot = os_aio_array_reserve_slot(type, is_log, array, message1, message2, file,
-		name, buf, offset, n, write_size);
+					 name, buf, offset, n, page_size, write_size);
 
 	if (type == OS_FILE_READ) {
 		if (srv_use_native_aio) {
@@ -6226,19 +6230,13 @@ os_file_trim(
 {
 
 	size_t len = slot->len;
-	size_t trim_len = UNIV_PAGE_SIZE - len;
+	size_t trim_len = slot->page_size - len;
 	os_offset_t off = slot->offset + len;
 	size_t bsize = slot->file_block_size;
 
-	// len here should be alligned to sector size
-	ut_ad((trim_len % bsize) == 0);
-	ut_ad((len % bsize) == 0);
-	ut_ad(bsize != 0);
-	ut_ad((off % bsize) == 0);
-
 #ifdef UNIV_TRIM_DEBUG
 	fprintf(stderr, "Note: TRIM: write_size %lu trim_len %lu len %lu off %lu bz %lu\n",
-		*slot->write_size, trim_len, len, off, bsize);
+		slot->write_size ? *slot->write_size : 0, trim_len, len, off, bsize);
 #endif
 
 	// Nothing to do if trim length is zero or if actual write
@@ -6252,11 +6250,6 @@ os_file_trim(
 	    (slot->write_size &&
 		    *slot->write_size > 0 &&
 		    len >= *slot->write_size)) {
-
-#ifdef UNIV_PAGECOMPRESS_DEBUG
-		fprintf(stderr, "Note: TRIM: write_size %lu trim_len %lu len %lu\n",
-			*slot->write_size, trim_len, len);
-#endif
 
 		if (slot->write_size) {
 			if (*slot->write_size > 0 && len >= *slot->write_size) {
