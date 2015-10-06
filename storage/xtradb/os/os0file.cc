@@ -50,9 +50,8 @@ Created 10/21/1995 Heikki Tuuri
 #include "trx0trx.h"
 #include "srv0mon.h"
 #include "srv0srv.h"
-#ifdef HAVE_POSIX_FALLOCATE
+#ifdef HAVE_LINUX_UNISTD_H
 #include "unistd.h"
-#include "fcntl.h"
 #endif
 #ifndef UNIV_HOTBACKUP
 # include "os0sync.h"
@@ -89,14 +88,10 @@ Created 10/21/1995 Heikki Tuuri
 #include <linux/falloc.h>
 #endif
 
-#if defined(HAVE_FALLOCATE)
-#ifndef FALLOC_FL_KEEP_SIZE
-#define FALLOC_FL_KEEP_SIZE 0x01
-#endif
-#ifndef FALLOC_FL_PUNCH_HOLE
-#define FALLOC_FL_PUNCH_HOLE 0x02
-#endif
-#endif
+#ifdef HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE
+# include <fcntl.h>
+# include <linux/falloc.h>
+#endif /* HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE */
 
 #ifdef HAVE_LZO
 #include "lzo/lzo1x.h"
@@ -221,6 +216,8 @@ struct os_aio_slot_t{
 					write */
 	byte*		buf;		/*!< buffer used in i/o */
 	ulint		type;		/*!< OS_FILE_READ or OS_FILE_WRITE */
+	ulint		is_log;		/*!< in: 1 is OS_FILE_LOG or 0 */
+
 	os_offset_t	offset;		/*!< file offset in bytes */
 	os_file_t	file;		/*!< file where to read or write */
 	const char*	name;		/*!< file name or path */
@@ -4573,6 +4570,7 @@ os_aio_slot_t*
 os_aio_array_reserve_slot(
 /*======================*/
 	ulint		type,	/*!< in: OS_FILE_READ or OS_FILE_WRITE */
+	ulint		is_log,	/*!< in: 1 is OS_FILE_LOG or 0 */
 	os_aio_array_t*	array,	/*!< in: aio array */
 	fil_node_t*	message1,/*!< in: message to be passed along with
 				the aio operation */
@@ -4681,6 +4679,7 @@ found:
 	slot->offset   = offset;
 	slot->io_already_done = FALSE;
 	slot->space_id = space_id;
+	slot->is_log   = is_log;
 
 	if (message1) {
 		slot->file_block_size = fil_node_get_block_size(message1);
@@ -4934,6 +4933,7 @@ ibool
 os_aio_func(
 /*========*/
 	ulint		type,	/*!< in: OS_FILE_READ or OS_FILE_WRITE */
+	ulint		is_log,	/*!< in: 1 is OS_FILE_LOG or 0 */
 	ulint		mode,	/*!< in: OS_AIO_NORMAL, ..., possibly ORed
 				to OS_AIO_SIMULATED_WAKE_LATER: the
 				last flag advises this function not to wake
@@ -5072,7 +5072,7 @@ try_again:
 		trx->io_read += n;
 	}
 
-	slot = os_aio_array_reserve_slot(type, array, message1, message2, file,
+	slot = os_aio_array_reserve_slot(type, is_log, array, message1, message2, file,
 					 name, buf, offset, n, space_id,
 		                         write_size);
 
@@ -5294,7 +5294,7 @@ os_aio_windows_handle(
 	}
 
 	if (slot->type == OS_FILE_WRITE) {
-		if (srv_use_trim && os_fallocate_failed == FALSE) {
+		if (!slot->is_log && srv_use_trim && os_fallocate_failed == FALSE) {
 			// Deallocate unused blocks from file system
 			os_file_trim(slot);
 		}
@@ -5390,7 +5390,7 @@ retry:
 			ut_a(slot->pos < end_pos);
 
 			if (slot->type == OS_FILE_WRITE) {
-				if (srv_use_trim && os_fallocate_failed == FALSE) {
+				if (!slot->is_log && srv_use_trim && os_fallocate_failed == FALSE) {
 					// Deallocate unused blocks from file system
 					os_file_trim(slot);
 				}
@@ -6337,17 +6337,19 @@ os_file_trim(
 			*slot->write_size, trim_len, len);
 #endif
 
-		if (*slot->write_size > 0 && len >= *slot->write_size) {
-			srv_stats.page_compressed_trim_op_saved.inc();
-		}
+		if (slot->write_size) {
+			if (*slot->write_size > 0 && len >= *slot->write_size) {
+				srv_stats.page_compressed_trim_op_saved.inc();
+			}
 
-		*slot->write_size = len;
+			*slot->write_size = len;
+		}
 
 		return (TRUE);
 	}
 
 #ifdef __linux__
-#if defined(HAVE_FALLOCATE)
+#if defined(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE)
 	int ret = fallocate(slot->file, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, off, trim_len);
 
 	if (ret) {
@@ -6385,7 +6387,7 @@ os_file_trim(
 		*slot->write_size = 0;
 	}
 
-#endif /* HAVE_FALLOCATE ... */
+#endif /* HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE ... */
 
 #elif defined(_WIN32)
 	FILE_LEVEL_TRIM flt;
