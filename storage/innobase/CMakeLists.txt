@@ -333,29 +333,6 @@ IF(MSVC)
           PROPERTIES COMPILE_FLAGS "/wd4003")
 ENDIF()
 
-
-IF(NOT MSVC)
-  CHECK_C_SOURCE_RUNS(
-  "
-  #define _GNU_SOURCE
-  #include <fcntl.h>
-  #include <linux/falloc.h>
-  int main()
-  {
-    /* Ignore the return value for now. Check if the flags exist.
-    The return value is checked  at runtime. */
-    fallocate(0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, 0);
-
-    return(0);
-  }"
-  HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE
-  )
-ENDIF()
-
-IF(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE)
- ADD_DEFINITIONS(-DHAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE=1)
-ENDIF()
-
 SET(INNOBASE_SOURCES
 	api/api0api.cc
 	api/api0misc.cc
