@@ -13,10 +13,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
+
 SET(WSREP_SOURCES wsrep_gtid.c wsrep_uuid.c wsrep_loader.c wsrep_dummy.c)
 
 ADD_CONVENIENCE_LIBRARY(wsrep ${WSREP_SOURCES})
 DTRACE_INSTRUMENT(wsrep)
-
-#ADD_EXECUTABLE(listener wsrep_listener.c ${WSREP_SOURCES})
-#TARGET_LINK_LIBRARIES(listener ${LIBDL})

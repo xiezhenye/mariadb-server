@@ -48,7 +48,9 @@
 #define WSREP_H
 
 #include <stdint.h>
+#ifndef __cplusplus
 #include <stdbool.h>
+#endif
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>

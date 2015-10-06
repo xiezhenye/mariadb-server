@@ -15,12 +15,15 @@
  */
 
 /*! @file Dummy wsrep API implementation. */
-
+#include <my_config.h>                          /* MACRO definitions */
 #include "wsrep_api.h"
-
 #include <errno.h>
-#include <stdbool.h>
+#if defined(HAVE_STRINGS_H)
+#include <strings.h>
+#endif
+#if defined(HAVE_STRING_H)
 #include <string.h>
+#endif
 
 /*! Dummy backend context. */
 typedef struct wsrep_dummy

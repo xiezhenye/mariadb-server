@@ -16,7 +16,13 @@
 
 /*! @file wsrep implementation loader */
 
-#include <dlfcn.h>
+/* Macros related to dynamic linking */
+#include <my_global.h>
+
+#if !defined(HAVE_DLOPEN)
+#error "Dynamic linking not available."
+#endif
+
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
