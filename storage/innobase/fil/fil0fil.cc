@@ -5223,7 +5223,7 @@ retry:
 		success = os_file_write(node->name, node->handle, buf,
 					offset, page_size * n_pages);
 #else
-		success = os_aio(OS_FILE_WRITE, OS_AIO_SYNC,
+		success = os_aio(OS_FILE_WRITE, 0, OS_AIO_SYNC,
 				 node->name, node->handle, buf,
 				 offset, page_size * n_pages,
 			         node, NULL, 0);
@@ -5872,6 +5872,7 @@ fil_io(
 	/* Queue the aio request */
 	ret = os_aio(
 		type,
+		is_log,
 		mode | wake_later,
 		node->name,
 		node->handle,
